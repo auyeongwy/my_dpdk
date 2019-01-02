@@ -22,6 +22,7 @@
 #include <rte_debug.h>
 #include <rte_ethdev.h>
 #include <rte_kni.h>
+#include <rte_flow.h>
 
 
 #define MBUF_POOL_SIZE 2048
@@ -154,10 +155,10 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 	if (rte_eth_tx_queue_setup(p_port_id, 0, nb_txd, rte_eth_dev_socket_id(p_port_id), &txconf) < 0)
 		rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup failed");
 
+	rte_eth_promiscuous_enable(p_port_id);
 	if (rte_eth_dev_start(p_port_id) < 0)
 		rte_exit(EXIT_FAILURE, "%s:%i: rte_eth_dev_start failed", __FILE__, __LINE__);
 	rte_eth_macaddr_get(p_port_id, &(p_app_port->mac_addr));
-	rte_eth_promiscuous_enable(p_port_id);
 	rte_spinlock_init(&(p_app_port->lock));		
 }
 
@@ -170,7 +171,6 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 static int do_listen(__attribute__((unused)) void *ptr_data)
 {
 	struct app_port *ptr_port = (struct app_port*)ptr_data;
-	//struct rte_mbuf *ptr_frame = (struct rte_mbuf*)ptr_port->buf_frames;
 	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
 	int *control = &(ptr_port->control);
 
@@ -204,6 +204,7 @@ int main(int argc, char *argv[])
 {
 	unsigned num_core, portid, i;
 	int lcore = -1; /* Start at -1. */
+	struct rte_flow_error error;
 
 
 	signal(SIGINT, handle_interrupt); /* Register signal handler. */
@@ -235,8 +236,17 @@ int main(int argc, char *argv[])
 		rte_eal_remote_launch(do_listen, &(v_app_ports[i]), v_app_ports[i].core_id);
 	}
 	
-
 	rte_eal_mp_wait_lcore();
+	RTE_ETH_FOREACH_DEV(portid) { /* Cleanup each port. */
+		//if(rte_flow_flush(portid, &error) != 0) {
+		//	if(error.message != NULL)
+		//		printf("%s\n", error.message);
+		//}
+		rte_flow_flush(portid, &error);
+        rte_eth_dev_stop(portid);
+        rte_eth_dev_close(portid);
+	}
+	
 	do_cleanup();
 	return 0;
 }
