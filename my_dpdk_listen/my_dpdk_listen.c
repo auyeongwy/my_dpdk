@@ -23,6 +23,7 @@
 #include <rte_ethdev.h>
 #include <rte_kni.h>
 #include <rte_flow.h>
+#include <rte_cycles.h>
 
 
 #define MBUF_POOL_SIZE 2048
@@ -101,6 +102,25 @@ static void do_cleanup()
 
 
 
+static void check_link_status(const uint16_t p_port_id)
+{
+	struct rte_eth_link link;
+	uint8_t rep_cnt = 9;
+
+	memset(&link, 0, sizeof(link));
+	do { /* Check link status for maximum 9 seconds */
+		rte_eth_link_get(p_port_id, &link);
+		if (link.link_status == ETH_LINK_UP)
+			break;
+		rte_delay_ms(1000);
+	} while (--rep_cnt);
+
+	if (link.link_status == ETH_LINK_DOWN)
+		rte_exit(EXIT_FAILURE, "%u link is still down\n", p_port_id);
+}
+
+
+
 /** Sets up a NIC port.
  *  @param p_port_id ID of the NIC port.
  *  @param p_core_id Core Id of the CPU core that will control this NIC port.
@@ -160,6 +180,8 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 		rte_exit(EXIT_FAILURE, "%s:%i: rte_eth_dev_start failed", __FILE__, __LINE__);
 	rte_eth_macaddr_get(p_port_id, &(p_app_port->mac_addr));
 	rte_spinlock_init(&(p_app_port->lock));		
+	
+	check_link_status(p_port_id);
 }
 
 
