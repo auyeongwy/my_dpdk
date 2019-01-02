@@ -106,7 +106,12 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 	memset(&cfg_port, 0, sizeof(cfg_port));
 	cfg_port.txmode.mq_mode = ETH_MQ_TX_NONE;
 	cfg_port.rxmode.ignore_offload_bitfield = 1;
+	cfg_port.rxmode.max_rx_pkt_len = ETHER_MAX_LEN;
 	rte_eth_dev_info_get(p_port_id, &dev_info);
+	if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
+		cfg_port.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;	
+	
+	
 	size_pktpool = dev_info.rx_desc_lim.nb_max + dev_info.tx_desc_lim.nb_max + PKTPOOL_EXTRA_SIZE;
 	snprintf(str_name, 16, "pkt_pool%i", p_port_id);
 	
@@ -121,6 +126,8 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 	p_app_port->port_dirty = 0;
 	p_app_port->idx_port = p_port_id;
 	p_app_port->core_id = p_core_id;
+	
+	
 	if (rte_eth_dev_configure(p_port_id, 1, 1, &cfg_port) < 0)
 		rte_exit(EXIT_FAILURE, "rte_eth_dev_configure failed");
 	if (rte_eth_dev_adjust_nb_rx_tx_desc(p_port_id, &nb_rxd, &nb_txd) < 0)
@@ -137,6 +144,7 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 	if (rte_eth_dev_start(p_port_id) < 0)
 		rte_exit(EXIT_FAILURE, "%s:%i: rte_eth_dev_start failed", __FILE__, __LINE__);
 	rte_eth_macaddr_get(p_port_id, &(p_app_port->mac_addr));
+	rte_eth_promiscuous_enable(p_port_id);
 	rte_spinlock_init(&(p_app_port->lock));		
 }
 
@@ -145,81 +153,30 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 static int do_listen(__attribute__((unused)) void *ptr_data)
 {
 	struct app_port *ptr_port = (struct app_port*)ptr_data;
-	struct rte_mbuf *ptr_frame = (struct rte_mbuf*)ptr_port->buf_frames;
+	//struct rte_mbuf *ptr_frame = (struct rte_mbuf*)ptr_port->buf_frames;
+	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
 	int *control = &(ptr_port->control);
 
 
 	const uint16_t port = ptr_port->idx_port;
 	uint16_t cnt_recv_frames;
 	uint16_t cnt_total_recv_frames = 0;
+	uint16_t i;
 
 
 	printf("Launching listen to port %u on lcore %u\n", port, ptr_port->core_id);
 	while(*control == 1) {	
 		/* Incoming frames */
-		cnt_recv_frames = rte_eth_rx_burst(port, 0, &ptr_frame, MAX_BURST_LENGTH);
+		cnt_recv_frames = rte_eth_rx_burst(port, 0, ptr_frame, MAX_BURST_LENGTH);
 		if(cnt_recv_frames > 0) {
 			cnt_total_recv_frames += cnt_recv_frames;
 			printf("Received frames: %u\n", cnt_total_recv_frames);
+			
+			for(i=0; i<cnt_recv_frames; i++)
+				rte_pktmbuf_free(ptr_frame[i]);
 		}
 	}
 	
-
-	//while (app_cfg.exit_now == 0) {
-		//for (idx_port = 0; idx_port < app_cfg.cnt_ports; idx_port++) {
-			///* Check that port is active and unlocked */
-			//ptr_port = &app_cfg.ports[idx_port];
-			//lock_result = rte_spinlock_trylock(&ptr_port->lock);
-			//if (lock_result == 0)
-				//continue;
-			//if (ptr_port->port_active == 0) {
-				//rte_spinlock_unlock(&ptr_port->lock);
-				//continue;
-			//}
-			//txq = &ptr_port->txq;
-
-			///* MAC address was updated */
-			//if (ptr_port->port_dirty == 1) {
-				//rte_eth_macaddr_get(ptr_port->idx_port,
-					//&ptr_port->mac_addr);
-				//ptr_port->port_dirty = 0;
-			//}
-
-			///* Incoming frames */
-			//cnt_recv_frames = rte_eth_rx_burst(
-				//ptr_port->idx_port, 0,
-				//&txq->buf_frames[txq->cnt_unsent],
-				//RTE_DIM(txq->buf_frames) - txq->cnt_unsent
-				//);
-			//if (cnt_recv_frames > 0) {
-				//for (idx_frame = 0;
-					//idx_frame < cnt_recv_frames;
-					//idx_frame++) {
-					//ptr_frame = txq->buf_frames[
-						//idx_frame + txq->cnt_unsent];
-					//process_frame(ptr_port, ptr_frame);
-				//}
-				//txq->cnt_unsent += cnt_recv_frames;
-			//}
-
-			///* Outgoing frames */
-			//if (txq->cnt_unsent > 0) {
-				//cnt_sent = rte_eth_tx_burst(
-					//ptr_port->idx_port, 0,
-					//txq->buf_frames,
-					//txq->cnt_unsent
-					//);
-				///* Shuffle up unsent frame pointers */
-				//for (idx_frame = cnt_sent;
-					//idx_frame < txq->cnt_unsent;
-					//idx_frame++)
-					//txq->buf_frames[idx_frame - cnt_sent] =
-						//txq->buf_frames[idx_frame];
-				//txq->cnt_unsent -= cnt_sent;
-			//}
-			//rte_spinlock_unlock(&ptr_port->lock);
-		//} /* end for( idx_port ) */
-	//} /* end for(;;) */
 
 	return 0;
 }
