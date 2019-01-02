@@ -102,6 +102,20 @@ static void do_cleanup()
 
 
 
+/** Convert ethernet address to printable format.
+ *  @param p_buf The buffer to store the printed result. Must be size ETHER_ADDR_FMT_SIZE.
+ *  @param p_eth_addr The ethernet address to print.
+ */
+static void print_ether_addr(char *__restrict__ p_buf, struct ether_addr *__restrict__ p_eth_addr)
+{
+	ether_format_addr(p_buf, ETHER_ADDR_FMT_SIZE, p_eth_addr);
+}
+
+
+
+/** Checks the link status of a NIC port over a period of 9 seconds. If link is not up in that time, causes application to exit.
+ *  @param p_port_id NIC port to check.
+ */
 static void check_link_status(const uint16_t p_port_id)
 {
 	struct rte_eth_link link;
@@ -195,7 +209,8 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 	struct app_port *ptr_port = (struct app_port*)ptr_data;
 	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
 	int *control = &(ptr_port->control);
-
+	struct ether_hdr *__restrict__ eth_hdr;
+	char src_addr[ETHER_ADDR_FMT_SIZE], dst_addr[ETHER_ADDR_FMT_SIZE];
 
 	const uint16_t port = ptr_port->port_id;
 	uint16_t cnt_recv_frames;
@@ -211,8 +226,26 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 			cnt_total_recv_frames += cnt_recv_frames;
 			printf("Received frames: %u\n", cnt_total_recv_frames);
 			
-			for(i=0; i<cnt_recv_frames; i++)
+			for(i=0; i<cnt_recv_frames; i++) {
+				eth_hdr = rte_pktmbuf_mtod(ptr_frame[i], struct ether_hdr *);
+				print_ether_addr(src_addr, &eth_hdr->s_addr);
+				print_ether_addr(dst_addr, &eth_hdr->d_addr);
+				printf("src addr: %s | dst addr: %s\n", src_addr, dst_addr);
+				//print_ether_addr("src addr: ", &eth_hdr->s_addr);
+				//print_ether_addr("dst addr: ", &eth_hdr->d_addr);
 				rte_pktmbuf_free(ptr_frame[i]);
+			}
+				
+				
+					//struct rte_mbuf *m = mbufs[j];
+
+					//eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+					//print_ether_addr("src=", &eth_hdr->s_addr);
+					//print_ether_addr(" - dst=", &eth_hdr->d_addr);
+					//printf(" - queue=0x%x", (unsigned int)i);
+					//printf("\n");
+
+					//rte_pktmbuf_free(m);				
 		}
 	}
 	
