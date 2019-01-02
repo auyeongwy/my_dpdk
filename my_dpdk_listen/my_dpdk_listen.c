@@ -1,5 +1,8 @@
-/** @file my_dpdk_init.c
- * 	Demonstrates intilizing a port with DPDK.
+/** @file my_dpdk_listen.c
+ * 	Demonstrates intilizing a port with DPDK, launching a listening thread on it.
+ * 
+ *  Usage:
+ *  ./my_dpdk_listen -l 0-1
  **/
 
 
@@ -38,17 +41,20 @@
 };*/
 
 
+/** Structure that defines each thread on a lcore.
+ * 
+ */
 struct app_port 
 {
-	int control;
-	struct ether_addr mac_addr;
-	struct rte_mbuf *buf_frames[MAX_BURST_LENGTH];
-	rte_spinlock_t lock;
-	int port_active;
-	int port_dirty;
-	int idx_port;
-	unsigned core_id;
-	struct rte_mempool *pkt_pool;
+	int control; /**< Controls the thread. 1=run. 0=stop. */
+	struct ether_addr mac_addr; /**< Mac address of the NIC card the thread runs on. */
+	struct rte_mbuf *buf_frames[MAX_BURST_LENGTH]; /**< The memory buffer to hold packet frames. */
+	rte_spinlock_t lock; /**< Spinlock indicator. */
+	int port_active; /**< Port active indicator. */
+	int port_dirty; /**< Port dirty indicator. */
+	int port_id; /**< NIC port id. */
+	unsigned core_id; /**< Slave core id. */
+	struct rte_mempool *pkt_pool; /**< Memory pool from where the frame buffers are allocated. */
 };
 
 
@@ -64,8 +70,8 @@ struct app_port
 
 
 
-static struct app_port *v_app_ports = NULL;
-static int v_num_ports = 0;
+static struct app_port *v_app_ports = NULL; /**< Array of struct app_port, one object per NIC port. */
+static int v_num_ports = 0; /**< Total number of NIC ports. */
 
 
 
@@ -84,6 +90,8 @@ static void handle_interrupt(int p_option)
 
 
 
+/** Frees allocated  memory prior to exit.
+ */
 static void do_cleanup()
 {
 	if(v_app_ports != NULL)
@@ -92,6 +100,11 @@ static void do_cleanup()
 
 
 
+/** Sets up a NIC port.
+ *  @param p_port_id ID of the NIC port.
+ *  @param p_core_id Core Id of the CPU core that will control this NIC port.
+ *  @param p_app_port struct app_port that contains information for running this NIC port.
+ */
 static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struct app_port *__restrict__ p_app_port)
 {
 	int size_pktpool;
@@ -124,7 +137,7 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 		
 	p_app_port->port_active = 1;
 	p_app_port->port_dirty = 0;
-	p_app_port->idx_port = p_port_id;
+	p_app_port->port_id = p_port_id;
 	p_app_port->core_id = p_core_id;
 	
 	
@@ -150,6 +163,10 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 
 
 
+/** Start listening on a NIC port for traffic.
+ *  @param ptr_data Pointer to struct app_port which contains al required information to start a job on an lcore listening to a NIC port.
+ *  @return Always returns 0.
+ */
 static int do_listen(__attribute__((unused)) void *ptr_data)
 {
 	struct app_port *ptr_port = (struct app_port*)ptr_data;
@@ -158,7 +175,7 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 	int *control = &(ptr_port->control);
 
 
-	const uint16_t port = ptr_port->idx_port;
+	const uint16_t port = ptr_port->port_id;
 	uint16_t cnt_recv_frames;
 	uint16_t cnt_total_recv_frames = 0;
 	uint16_t i;
@@ -201,10 +218,11 @@ int main(int argc, char *argv[])
 	if((v_num_ports < 1) || (num_core - v_num_ports < 1)) /* Ensure we always have at least one more core than number of ports. */
 		rte_exit(EXIT_FAILURE, "Insufficient ports");
 	
-	if((v_app_ports = calloc(v_num_ports, sizeof(struct app_port))) == NULL)
+	if((v_app_ports = calloc(v_num_ports, sizeof(struct app_port))) == NULL) /* Allocate memory for controlling each job. */
 		rte_exit(EXIT_FAILURE, "System memory error");
+		
 	i = 0;
-	RTE_ETH_FOREACH_DEV(portid) {
+	RTE_ETH_FOREACH_DEV(portid) { /* Setup each available port. */
 		lcore = rte_get_next_lcore(lcore, 1, 0);
 		setup_port(portid, lcore, &(v_app_ports[i]));
 		printf("Mac: %02x:%02x:%02x:%02x:%02x:%02x\n", v_app_ports[i].mac_addr.addr_bytes[0], v_app_ports[i].mac_addr.addr_bytes[1], v_app_ports[i].mac_addr.addr_bytes[2], v_app_ports[i].mac_addr.addr_bytes[3], v_app_ports[i].mac_addr.addr_bytes[4], v_app_ports[i].mac_addr.addr_bytes[5]);

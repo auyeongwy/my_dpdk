@@ -21,7 +21,7 @@
 #include <rte_ethdev.h>
 
 
-int say_hello(void *p_arp)
+static int say_hello(void *p_arp)
 {	
 	printf("Hello from core %u\n", rte_lcore_id());
 	return 0;
@@ -44,6 +44,6 @@ int main(int argc, char *argv[])
 	ports = rte_eth_dev_count_avail();
 	printf("No. of ports: %u\n", ports);
 	
-	rte_eal_mp_wait_lcore();
+	rte_eal_mp_wait_lcore(); /* Wait for all slave cores to stop their jobs. */
 	return 0;
 }
