@@ -1,0 +1,12 @@
+CC = gcc
+OPT = -O2 -Wall -march=native -I/home/auyeong/Work/dpdk/x86_64-native-linuxapp-gcc/include -L/home/auyeong/Work/dpdk/x86_64-native-linuxapp-gcc/lib
+LIB = /home/auyeong/Work/dpdk/x86_64-native-linuxapp-gcc/lib/*.a -lpthread -lnuma -ldl
+
+all: my_dpdk_hello
+
+my_dpdk_hello: my_dpdk_hello.c
+	$(CC) $(OPT) my_dpdk_hello.c -o my_dpdk_hello $(LIB)
+	
+clean:
+	rm -f my_dpdk_hello
+	rm -rf build

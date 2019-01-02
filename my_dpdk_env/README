@@ -1,0 +1,3 @@
+init_env.sh initializes DPDK environment variables. Modify it to suit the environment. The commands here are best copied to a shell initialization script such as inside /etc/profile.d so they are automatically set whenever a new shell environment is launched.
+
+init_dpdk.sh initializes the DPDK environment by setting up the hugetlbfs and loading the appropriate kernel modules. Modify as necessary to suit the environment. The current variables are used for a VM with limited resources. Consult the DPDK documentation to use higher values on more generous hardware.

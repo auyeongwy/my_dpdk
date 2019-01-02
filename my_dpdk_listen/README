@@ -1,0 +1,4 @@
+Starts DPDK and listens on a port. Currently this has been tested on a VM with 2 cores and only 1 NIC port. It should be scalable to more cores and NIC ports but need to be further tested to verify.
+
+Run with:
+/my_dpdk_listen -l 0-1
