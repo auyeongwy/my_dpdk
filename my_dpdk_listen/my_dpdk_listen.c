@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <sys/queue.h>
 #include <signal.h>
+#include <arpa/inet.h>
 
 
 #include <rte_memory.h>
@@ -210,12 +211,14 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
 	int *control = &(ptr_port->control);
 	struct ether_hdr *__restrict__ eth_hdr;
-	char src_addr[ETHER_ADDR_FMT_SIZE], dst_addr[ETHER_ADDR_FMT_SIZE];
+	struct ipv4_hdr *__restrict__ ip_hdr;
+	char src_eth[ETHER_ADDR_FMT_SIZE], dst_eth[ETHER_ADDR_FMT_SIZE];
 
 	const uint16_t port = ptr_port->port_id;
 	uint16_t cnt_recv_frames;
 	uint16_t cnt_total_recv_frames = 0;
 	uint16_t i;
+	struct in_addr src_ip, dst_ip;
 
 
 	printf("Launching listen to port %u on lcore %u\n", port, ptr_port->core_id);
@@ -228,24 +231,15 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 			
 			for(i=0; i<cnt_recv_frames; i++) {
 				eth_hdr = rte_pktmbuf_mtod(ptr_frame[i], struct ether_hdr *);
-				print_ether_addr(src_addr, &eth_hdr->s_addr);
-				print_ether_addr(dst_addr, &eth_hdr->d_addr);
-				printf("src addr: %s | dst addr: %s\n", src_addr, dst_addr);
-				//print_ether_addr("src addr: ", &eth_hdr->s_addr);
-				//print_ether_addr("dst addr: ", &eth_hdr->d_addr);
+				ip_hdr = rte_pktmbuf_mtod_offset(ptr_frame[i], struct ipv4_hdr *, sizeof(struct ether_hdr));
+				print_ether_addr(src_eth, &eth_hdr->s_addr);
+				print_ether_addr(dst_eth, &eth_hdr->d_addr);
+				src_ip.s_addr = ip_hdr->src_addr;
+				dst_ip.s_addr = ip_hdr->dst_addr;
+
+				printf("src eth: %s | dst eth: %s\nsrc ip: %s | dst ip: %s\n", src_eth, dst_eth, inet_ntoa(src_ip), inet_ntoa(dst_ip));
 				rte_pktmbuf_free(ptr_frame[i]);
 			}
-				
-				
-					//struct rte_mbuf *m = mbufs[j];
-
-					//eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
-					//print_ether_addr("src=", &eth_hdr->s_addr);
-					//print_ether_addr(" - dst=", &eth_hdr->d_addr);
-					//printf(" - queue=0x%x", (unsigned int)i);
-					//printf("\n");
-
-					//rte_pktmbuf_free(m);				
 		}
 	}
 	
