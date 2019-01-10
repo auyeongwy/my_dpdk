@@ -5,7 +5,7 @@
 APP = my_dpdk_listen
 
 # all source are stored in SRCS-y
-SRCS-y := my_dpdk_listen.c
+SRCS-y := my_dpdk_listen.c listen_worker.c
 
 # Build using pkg-config variables if possible
 $(shell pkg-config --exists libdpdk)

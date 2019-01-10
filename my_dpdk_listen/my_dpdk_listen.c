@@ -26,6 +26,8 @@
 #include <rte_flow.h>
 #include <rte_cycles.h>
 
+#include "listen_worker.h"
+#include "custom_defs.h"
 
 #define MBUF_POOL_SIZE 2048
 #define MBUF_POOL_CACHE 32
@@ -34,7 +36,6 @@
 #define PORT_TX_QUEUE_SIZE 1024
 #define PKTPOOL_EXTRA_SIZE 512
 #define PKTPOOL_CACHE 32
-#define MAX_BURST_LENGTH 32
 
 
 /*struct txq_port 
@@ -43,22 +44,6 @@
 	struct rte_mbuf *buf_frames[MAX_BURST_LENGTH];
 };*/
 
-
-/** Structure that defines each thread on a lcore.
- * 
- */
-struct app_port 
-{
-	int control; /**< Controls the thread. 1=run. 0=stop. */
-	struct ether_addr mac_addr; /**< Mac address of the NIC card the thread runs on. */
-	struct rte_mbuf *buf_frames[MAX_BURST_LENGTH]; /**< The memory buffer to hold packet frames. */
-	rte_spinlock_t lock; /**< Spinlock indicator. */
-	int port_active; /**< Port active indicator. */
-	int port_dirty; /**< Port dirty indicator. */
-	int port_id; /**< NIC port id. */
-	unsigned core_id; /**< Slave core id. */
-	struct rte_mempool *pkt_pool; /**< Memory pool from where the frame buffers are allocated. */
-};
 
 
 /*static struct rte_eth_conf port_conf = {
@@ -237,7 +222,7 @@ static int do_listen(__attribute__((unused)) void *ptr_data)
 				src_ip.s_addr = ip_hdr->src_addr;
 				dst_ip.s_addr = ip_hdr->dst_addr;
 
-				printf("src eth: %s | dst eth: %s\nsrc ip: %s | dst ip: %s\n", src_eth, dst_eth, inet_ntoa(src_ip), inet_ntoa(dst_ip));
+				printf("src eth: %s | dst eth: %s\nsrc ip: %s | dst ip: %s\nNext proto: %u\n", src_eth, dst_eth, inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
 				rte_pktmbuf_free(ptr_frame[i]);
 			}
 		}
@@ -296,6 +281,7 @@ int main(int argc, char *argv[])
         rte_eth_dev_close(portid);
 	}
 	
+	worker_do_listen(NULL);
 	do_cleanup();
 	return 0;
 }
