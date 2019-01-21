@@ -12,7 +12,6 @@
 #include <errno.h>
 #include <sys/queue.h>
 #include <signal.h>
-#include <arpa/inet.h>
 
 
 #include <rte_memory.h>
@@ -84,17 +83,6 @@ static void do_cleanup()
 {
 	if(v_app_ports != NULL)
 		free(v_app_ports);
-}
-
-
-
-/** Convert ethernet address to printable format.
- *  @param p_buf The buffer to store the printed result. Must be size ETHER_ADDR_FMT_SIZE.
- *  @param p_eth_addr The ethernet address to print.
- */
-static void print_ether_addr(char *__restrict__ p_buf, struct ether_addr *__restrict__ p_eth_addr)
-{
-	ether_format_addr(p_buf, ETHER_ADDR_FMT_SIZE, p_eth_addr);
 }
 
 
@@ -186,54 +174,6 @@ static void setup_port(const unsigned p_port_id, const unsigned p_core_id, struc
 
 
 
-/** Start listening on a NIC port for traffic.
- *  @param ptr_data Pointer to struct app_port which contains al required information to start a job on an lcore listening to a NIC port.
- *  @return Always returns 0.
- */
-static int do_listen(__attribute__((unused)) void *ptr_data)
-{
-	struct app_port *ptr_port = (struct app_port*)ptr_data;
-	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
-	int *control = &(ptr_port->control);
-	struct ether_hdr *__restrict__ eth_hdr;
-	struct ipv4_hdr *__restrict__ ip_hdr;
-	char src_eth[ETHER_ADDR_FMT_SIZE], dst_eth[ETHER_ADDR_FMT_SIZE];
-
-	const uint16_t port = ptr_port->port_id;
-	uint16_t cnt_recv_frames;
-	uint16_t cnt_total_recv_frames = 0;
-	uint16_t i;
-	struct in_addr src_ip, dst_ip;
-
-
-	printf("Launching listen to port %u on lcore %u\n", port, ptr_port->core_id);
-	while(*control == 1) {	
-		/* Incoming frames */
-		cnt_recv_frames = rte_eth_rx_burst(port, 0, ptr_frame, MAX_BURST_LENGTH);
-		if(cnt_recv_frames > 0) {
-			cnt_total_recv_frames += cnt_recv_frames;
-			printf("Received frames: %u\n", cnt_total_recv_frames);
-			
-			for(i=0; i<cnt_recv_frames; i++) {
-				eth_hdr = rte_pktmbuf_mtod(ptr_frame[i], struct ether_hdr *);
-				ip_hdr = rte_pktmbuf_mtod_offset(ptr_frame[i], struct ipv4_hdr *, sizeof(struct ether_hdr));
-				print_ether_addr(src_eth, &eth_hdr->s_addr);
-				print_ether_addr(dst_eth, &eth_hdr->d_addr);
-				src_ip.s_addr = ip_hdr->src_addr;
-				dst_ip.s_addr = ip_hdr->dst_addr;
-
-				printf("src eth: %s | dst eth: %s\nsrc ip: %s | dst ip: %s\nNext proto: %u\n", src_eth, dst_eth, inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
-				rte_pktmbuf_free(ptr_frame[i]);
-			}
-		}
-	}
-	
-
-	return 0;
-}
-
-
-
 int main(int argc, char *argv[])
 {
 	unsigned num_core, portid, i;
@@ -267,7 +207,7 @@ int main(int argc, char *argv[])
 	
 	for(i=0; i<v_num_ports; i++) { /* Launch threads on the cores. */
 		v_app_ports[i].control = 1;
-		rte_eal_remote_launch(do_listen, &(v_app_ports[i]), v_app_ports[i].core_id);
+		rte_eal_remote_launch(worker_do_listen, &(v_app_ports[i]), v_app_ports[i].core_id);
 	}
 	
 	rte_eal_mp_wait_lcore();
@@ -281,7 +221,6 @@ int main(int argc, char *argv[])
         rte_eth_dev_close(portid);
 	}
 	
-	worker_do_listen(NULL);
 	do_cleanup();
 	return 0;
 }
