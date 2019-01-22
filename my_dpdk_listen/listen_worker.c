@@ -20,6 +20,9 @@
 
 #define PRINT_BUFFER_SIZE 128
 
+static char g_print_buf[PRINT_BUFFER_SIZE]; /**< Stdio print buffer. */
+static int g_print_buf_size; /**< Counter to track size of @g_print_buf. */
+
 
 /** Get the VLAN offset.
  *  @param p_eth_hdr The ethernet header.
@@ -56,21 +59,36 @@ static void print_ether_addr(char *__restrict__ p_buf, struct ether_addr *__rest
 
 
 /** Processes an ARP frame
- *  @param p_frame_num Number of the frame.
- */
-inline static void process_arp(const uint16_t p_frame_num)
+  */
+inline static void process_arp()
 {
-	printf("Frame %u is ARP\n", p_frame_num);
+	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is ARP\n");
 }
 
 
 
-/** Processes an ICMP frame
+/** Processes an IP6 frame
+  */
+inline static void process_ip6()
+{
+	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP6\n");
+}
+
+
+
+/** Processes an IP4 frame
  *  @param p_frame_num Number of the frame.
  */
-inline static void process_ip6(const uint16_t p_frame_num)
+static void process_ip4(const uint16_t p_offset, struct ether_hdr *__restrict__ p_eth_hdr)
 {
-	printf("Frame %u is IPv6\n", p_frame_num);
+	struct ipv4_hdr *__restrict__ ip_hdr;
+	struct in_addr src_ip, dst_ip;
+	
+	
+	ip_hdr = (struct ipv4_hdr *)((char *)(p_eth_hdr + 1) + p_offset); /* Get the IP4 addresses. */
+	src_ip.s_addr = ip_hdr->src_addr;
+	dst_ip.s_addr = ip_hdr->dst_addr;
+	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP4\nsrc ip: %s | dst ip: %s\nProto id: %u\n", inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
 }
 
 
@@ -86,15 +104,12 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 	struct rte_mbuf **ptr_frame = (struct rte_mbuf**)ptr_port->buf_frames;
 	int *control = &(ptr_port->control);
 	struct ether_hdr *__restrict__ eth_hdr;
-	struct ipv4_hdr *__restrict__ ip_hdr;
-	char src_eth[ETHER_ADDR_FMT_SIZE], dst_eth[ETHER_ADDR_FMT_SIZE], print_buf[PRINT_BUFFER_SIZE];
+	char src_eth[ETHER_ADDR_FMT_SIZE], dst_eth[ETHER_ADDR_FMT_SIZE];
 
 	const uint16_t port = ptr_port->port_id;
 	const unsigned lcore = ptr_port->core_id;
 	uint16_t cnt_recv_frames;
 	uint16_t i, ether_type, offset;
-	struct in_addr src_ip, dst_ip;
-	int print_buf_size;
 
 
 	printf("Launching listen to port %u on lcore %u\n", port, lcore);
@@ -115,29 +130,25 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 				
 				print_ether_addr(src_eth, &eth_hdr->s_addr); /* Get the Ethernet addresses. */
 				print_ether_addr(dst_eth, &eth_hdr->d_addr);
-				print_buf_size = snprintf(print_buf, PRINT_BUFFER_SIZE, "src eth: %s | dst eth: %s\n", src_eth, dst_eth);
+				g_print_buf_size = snprintf(g_print_buf, PRINT_BUFFER_SIZE, "src eth: %s | dst eth: %s\n", src_eth, dst_eth);
 
 
 				switch (rte_be_to_cpu_16(ether_type)) {
 					case ETHER_TYPE_ARP:
-						process_arp(i+1);
+						process_arp();
 						break;
 					case ETHER_TYPE_IPv6:
-						process_ip6(i+1);
+						process_ip6();
 						break;					
 					case ETHER_TYPE_IPv4:
+						process_ip4(offset, eth_hdr);
 						break;
 					default:
+						snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame\n");
 						break;
 				}
 								
-				if (ether_type == rte_cpu_to_be_16(ETHER_TYPE_IPv4)) {
-					ip_hdr = (struct ipv4_hdr *)((char *)(eth_hdr + 1) + offset); /* Get the IP4 addresses. */
-					src_ip.s_addr = ip_hdr->src_addr;
-					dst_ip.s_addr = ip_hdr->dst_addr;
-					snprintf(print_buf+print_buf_size, PRINT_BUFFER_SIZE-print_buf_size, "src ip: %s | dst ip: %s\nProto id: %u\n", inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
-				}
-				printf(print_buf);
+				printf(g_print_buf);
 				rte_pktmbuf_free(ptr_frame[i]);
 			}
 		}
