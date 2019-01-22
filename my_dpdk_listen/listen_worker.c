@@ -18,7 +18,7 @@
 #include <rte_cycles.h>
 
 
-#define PRINT_BUFFER_SIZE 256
+#define PRINT_BUFFER_SIZE 128
 
 static char g_print_buf[PRINT_BUFFER_SIZE]; /**< Stdio print buffer. */
 static int g_print_buf_size; /**< Counter to track size of @g_print_buf. */
@@ -117,9 +117,10 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 		/* Incoming frames */
 		cnt_recv_frames = rte_eth_rx_burst(port, 0, ptr_frame, MAX_BURST_LENGTH);
 		if(cnt_recv_frames > 0) {
-			g_print_buf_size = snprintf(g_print_buf, PRINT_BUFFER_SIZE, "lcore %u received %u frames\n", lcore, cnt_recv_frames);
+			printf("lcore %u received %u frames\n", lcore, cnt_recv_frames);
 			
 			for(i=0; i<cnt_recv_frames; i++) {
+				g_print_buf_size = 0;
 				eth_hdr = rte_pktmbuf_mtod(ptr_frame[i], struct ether_hdr *);
 				ether_type = eth_hdr->ether_type;
 				offset = 0;
@@ -144,7 +145,7 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 						process_ip4(offset, eth_hdr);
 						break;
 					default:
-						g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame\n");
+						g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame: %u\n", rte_be_to_cpu_16(ether_type));
 						break;
 				}
 								
