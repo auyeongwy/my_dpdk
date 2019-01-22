@@ -18,7 +18,7 @@
 #include <rte_cycles.h>
 
 
-#define PRINT_BUFFER_SIZE 128
+#define PRINT_BUFFER_SIZE 256
 
 static char g_print_buf[PRINT_BUFFER_SIZE]; /**< Stdio print buffer. */
 static int g_print_buf_size; /**< Counter to track size of @g_print_buf. */
@@ -62,7 +62,7 @@ static void print_ether_addr(char *__restrict__ p_buf, struct ether_addr *__rest
   */
 inline static void process_arp()
 {
-	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is ARP\n");
+	g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is ARP\n");
 }
 
 
@@ -71,7 +71,7 @@ inline static void process_arp()
   */
 inline static void process_ip6()
 {
-	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP6\n");
+	g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP6\n");
 }
 
 
@@ -88,7 +88,7 @@ static void process_ip4(const uint16_t p_offset, struct ether_hdr *__restrict__ 
 	ip_hdr = (struct ipv4_hdr *)((char *)(p_eth_hdr + 1) + p_offset); /* Get the IP4 addresses. */
 	src_ip.s_addr = ip_hdr->src_addr;
 	dst_ip.s_addr = ip_hdr->dst_addr;
-	snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP4\nsrc ip: %s | dst ip: %s\nProto id: %u\n", inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
+	g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP4\nsrc ip: %s | dst ip: %s\nProto id: %u\n", inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
 }
 
 
@@ -117,7 +117,7 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 		/* Incoming frames */
 		cnt_recv_frames = rte_eth_rx_burst(port, 0, ptr_frame, MAX_BURST_LENGTH);
 		if(cnt_recv_frames > 0) {
-			printf("lcore %u received %u frames\n", lcore, cnt_recv_frames);
+			g_print_buf_size = snprintf(g_print_buf, PRINT_BUFFER_SIZE, "lcore %u received %u frames\n", lcore, cnt_recv_frames);
 			
 			for(i=0; i<cnt_recv_frames; i++) {
 				eth_hdr = rte_pktmbuf_mtod(ptr_frame[i], struct ether_hdr *);
@@ -125,12 +125,12 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 				offset = 0;
 				if (eth_hdr->ether_type == rte_cpu_to_be_16(ETHER_TYPE_VLAN)) {
 					offset = get_vlan_offset(eth_hdr, &ether_type);
-					printf("Frame %u has VLAN tag. Offset: %u\n", i+1, offset);
+					g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame %u has VLAN tag. Offset: %u\n", i+1, offset);
 				}
 				
 				print_ether_addr(src_eth, &eth_hdr->s_addr); /* Get the Ethernet addresses. */
 				print_ether_addr(dst_eth, &eth_hdr->d_addr);
-				g_print_buf_size = snprintf(g_print_buf, PRINT_BUFFER_SIZE, "src eth: %s | dst eth: %s\n", src_eth, dst_eth);
+				g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "src eth: %s | dst eth: %s\n", src_eth, dst_eth);
 
 
 				switch (rte_be_to_cpu_16(ether_type)) {
@@ -144,7 +144,7 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 						process_ip4(offset, eth_hdr);
 						break;
 					default:
-						snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame\n");
+						g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame\n");
 						break;
 				}
 								
