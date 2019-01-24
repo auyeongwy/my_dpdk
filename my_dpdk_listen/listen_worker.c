@@ -79,13 +79,15 @@ inline static void process_ip6()
 /** Processes an IP4 frame
  *  @param p_frame_num Number of the frame.
  */
-static void process_ip4(const uint16_t p_offset, struct ether_hdr *__restrict__ p_eth_hdr)
+//static void process_ip4(const uint16_t p_offset, struct ether_hdr *__restrict__ p_eth_hdr)
+static void process_ip4(const uint16_t p_offset, struct rte_mbuf *__restrict__ p_frame)
 {
 	struct ipv4_hdr *__restrict__ ip_hdr;
 	struct in_addr src_ip, dst_ip;
 	
 	
-	ip_hdr = (struct ipv4_hdr *)((char *)(p_eth_hdr + 1) + p_offset); /* Get the IP4 addresses. */
+	ip_hdr = rte_pktmbuf_mtod_offset(p_frame, struct ipv4_hdr *, sizeof(struct ether_hdr));
+	//ip_hdr = (struct ipv4_hdr *)((char *)(p_eth_hdr + 1) + p_offset); /* Get the IP4 addresses. */
 	src_ip.s_addr = ip_hdr->src_addr;
 	dst_ip.s_addr = ip_hdr->dst_addr;
 	g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Frame is IP4\nsrc ip: %s | dst ip: %s\nProto id: %u\n", inet_ntoa(src_ip), inet_ntoa(dst_ip), ip_hdr->next_proto_id);
@@ -142,7 +144,8 @@ int worker_do_listen(__attribute__((unused)) void *ptr_data)
 						process_ip6();
 						break;					
 					case ETHER_TYPE_IPv4:
-						process_ip4(offset, eth_hdr);
+						process_ip4(offset, ptr_frame[i]);
+						//process_ip4(offset, eth_hdr);
 						break;
 					default:
 						g_print_buf_size += snprintf(g_print_buf+g_print_buf_size, PRINT_BUFFER_SIZE-g_print_buf_size, "Unknown Frame: %u\n", rte_be_to_cpu_16(ether_type));
